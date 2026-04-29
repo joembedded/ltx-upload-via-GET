@@ -1,4 +1,6 @@
-# WugTest - (C)JoEmbedded - Stand 29.04.2026
+# WugTest - (C)JoEmbedded
+
+### **Stand:** 30.04.2026 
 
 Arduino-Sketch für einen Uploader auf [LTX_SERVER](https://github.com/joembedded/LTX_server) via GET-UPLOAD über einen XIAO ESP32S3.
 
@@ -43,7 +45,6 @@ Wichtige Makros:
 #define LTX_ENDPOINT "http://example.org/ltx/sw/lxu_wug_v1.php"
 #define LTX_DEVICE_ID "0000000000000000"
 #define LTX_DEVICE_PASSWORD "CHANGE_ME"
-#define SEND_INTERVAL_SECONDS 60UL
 ```
 
 `secret/config.h` ist absichtlich in `.gitignore` eingetragen. Nur die Platzhalterdatei soll ins Repository.
