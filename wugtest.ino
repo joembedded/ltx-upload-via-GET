@@ -24,6 +24,7 @@
 
 // Die privaten Werte liegen in secret/config.h.
 // Als Vorlage gibt es secret/_placeholder_config.h.
+
 #include "secret/config.h"
 
 // ---------------------------------------------------------------------------
