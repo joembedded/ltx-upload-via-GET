@@ -4,7 +4,7 @@
 /*
   WugTest fuer Seeed Studio XIAO ESP32S3 - (C)JoEmbedded.de
 
-  Diese Skizze sendet einen Temperaturwert an ein LTX/Wunderground-
+  Dieser Sketch sendet einen Temperaturwert an ein LTX/Wunderground-
   aehnliches GET-Upload-Script.
 
   Bezug zur Doku docu/0950_get_upload_DE.md:
@@ -21,6 +21,7 @@
 
 // Die privaten Werte liegen in secret/config.h.
 // Als Vorlage gibt es secret/_placeholder_config.h.
+
 #include "secret/config.h"
 
 // ---------------------------------------------------------------------------
