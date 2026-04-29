@@ -17,7 +17,7 @@ http://server.example/ltx/sw/lxu_wug_v1.php?ID=0000000000000000&PASSWORD=CHANGE_
 - [wugtest.ino](wugtest.ino): Arduino-Sketch fuer WLAN-Verbindung und HTTP-GET-Upload.
 - [secret/_placeholder_config.h](secret/_placeholder_config.h): Vorlage mit ungefaehrlichen Beispielwerten.
 - `secret/config.h`: lokale private Konfiguration mit WLAN- und Upload-Zugangsdaten.
-- [docu/0950_get_upload_DE.md](docu/0950_get_upload_DE.md): aufbereitete Dokumentation zum GET-Upload.
+- [docu/0950_get_upload_DE.md](docu/0950_get_upload_DE.md): Dokumentation zum GET-Upload.
 
 ## Konfiguration
 
@@ -47,3 +47,41 @@ Wichtige Makros:
 ```
 
 `secret/config.h` ist absichtlich in `.gitignore` eingetragen. Nur die Platzhalterdatei soll ins Repository.
+
+## Arduino CLI
+
+Der Sketch kann mit `arduino-cli` fuer den XIAO ESP32S3 kompiliert und
+hochgeladen werden. Die passende Board-ID ist:
+
+```text
+esp32:esp32:XIAO_ESP32S3
+```
+
+Aus dem Projektverzeichnis kompilieren:
+
+```powershell
+cd C:\c\arduino\wugtest
+arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 .
+```
+
+Kompilieren und direkt auf das Board hochladen, hier beispielhaft auf `COM33`:
+
+```powershell
+arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 --port COM33 --upload .
+```
+
+Den aktuellen Port zeigt:
+
+```powershell
+arduino-cli board list
+```
+
+Wenn die erzeugten Binaerdateien im Sketch-Verzeichnis abgelegt werden sollen:
+
+```powershell
+arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 --export-binaries .
+```
+
+Falls der Upload nicht startet, den XIAO ESP32S3 in den Bootloader-Modus
+bringen: `BOOT` gedrueckt halten, kurz `RESET` druecken, dann `BOOT` loslassen
+und den Upload erneut starten.

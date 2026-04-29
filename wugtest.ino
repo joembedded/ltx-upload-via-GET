@@ -1,10 +1,6 @@
-#include <WiFi.h>
-#include <HTTPClient.h>
+/* WugTest fuer Seeed Studio XIAO ESP32S3 - (C)JoEmbedded.de
 
-/*
-  WugTest fuer Seeed Studio XIAO ESP32S3 - (C)JoEmbedded.de
-
-  Diese Skizze sendet einen Temperaturwert an ein LTX/Wunderground-
+  Dieser Sketch sendet einen Temperaturwert an ein LTX/Wunderground-
   aehnliches GET-Upload-Script.
 
   Bezug zur Doku docu/0950_get_upload_DE.md:
@@ -13,7 +9,14 @@
   - Der Parameter tempf ist in der LTX-Parameterliste als Temperaturwert
     im Rohformat Fahrenheit definiert.
   - Ein Upload-Intervall von 1 Minute ist ein typischer Wert.
+  - der XIAO ESP32S3 benötigt hier ca. 35 mA @ 5V 
 */
+
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <esp_wifi.h>
+#include <stdarg.h>
+
 
 // ---------------------------------------------------------------------------
 // Konfiguration
@@ -27,11 +30,52 @@
 // Laufzeitstatus
 // ---------------------------------------------------------------------------
 
+#define UART_TX 43  // D6
+#define UART_RX 44  // D7
+#define WIFI_RECONNECT_CHECK_MS 5000UL
+
 static unsigned long lastSendMs = 0;
 
 // ---------------------------------------------------------------------------
 // Hilfsfunktionen
 // ---------------------------------------------------------------------------
+
+static void tb_printf(const char *fmt, ...)
+{
+  char buf[256];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+
+  Serial1.print(buf);
+  Serial.print(buf);
+}
+
+static void tb_init()
+{
+  Serial.begin(115200);
+  Serial.setDebugOutput(true);
+  Serial1.begin(115200, SERIAL_8N1, UART_RX, UART_TX);
+  tb_printf("\n\nBoard initialisiert.\n");
+}
+
+static void configureWiFiPowerSave()
+{
+  WiFi.persistent(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.setSleep(true);
+  esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+}
+
+static void waitLowPower(unsigned long waitMs)
+{
+  if (waitMs == 0) {
+    return;
+  }
+
+  delay(waitMs);
+}
 
 static bool connectWiFi()
 {
@@ -39,29 +83,51 @@ static bool connectWiFi()
     return true;
   }
 
-  Serial.print("Verbinde mit WLAN ");
-  Serial.print(WIFI_SSID);
+  tb_printf("Verbinde mit WLAN %s", WIFI_SSID);
 
   WiFi.mode(WIFI_STA);
+  configureWiFiPowerSave();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   const unsigned long startedAt = millis();
   while (WiFi.status() != WL_CONNECTED &&
          millis() - startedAt < WIFI_CONNECT_TIMEOUT_MS) {
-    delay(500);
-    Serial.print(".");
+    waitLowPower(500);
+    tb_printf(".");
   }
 
-  Serial.println();
+  tb_printf("\n");
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WLAN-Verbindung fehlgeschlagen.");
+    tb_printf("WLAN-Verbindung fehlgeschlagen.\n");
     return false;
   }
 
-  Serial.print("WLAN verbunden, IP: ");
-  Serial.println(WiFi.localIP());
+  tb_printf("WLAN verbunden, IP: %s\n", WiFi.localIP().toString().c_str());
   return true;
+}
+
+static unsigned long sendIntervalMs()
+{
+  return SEND_INTERVAL_SECONDS * 1000UL;
+}
+
+static void waitUntilNextSend()
+{
+  const unsigned long intervalMs = sendIntervalMs();
+
+  while (millis() - lastSendMs < intervalMs) {
+    const unsigned long elapsedMs = millis() - lastSendMs;
+    const unsigned long remainingMs = intervalMs - elapsedMs;
+    const unsigned long sleepMs = min(remainingMs, WIFI_RECONNECT_CHECK_MS);
+
+    waitLowPower(sleepMs);
+
+    if (WiFi.status() != WL_CONNECTED) {
+      tb_printf("WLAN-Verbindung verloren.\n");
+      connectWiFi();
+    }
+  }
 }
 
 static float readApproxTemperatureF()
@@ -96,37 +162,34 @@ static void sendTemperature()
     return;
   }
 
+  tb_printf("WLAN RSSI: %d dBm\n", WiFi.RSSI());
+
   const float tempF = readApproxTemperatureF();
   const String url = buildUploadUrl(tempF);
+  char tempBuffer[16];
+  snprintf(tempBuffer, sizeof(tempBuffer), "%.2f", tempF);
 
-  Serial.print("Temperatur ungefaehr: ");
-  Serial.print(tempF, 2);
-  Serial.println(" F");
-
-  Serial.print("Upload: ");
-  Serial.println(url);
+  tb_printf("Temperatur ungefaehr: %s F\n", tempBuffer);
+  tb_printf("Upload: %s\n", url.c_str());
 
   HTTPClient http;
   http.setTimeout(HTTP_REQUEST_TIMEOUT_MS);
 
   if (!http.begin(url)) {
-    Serial.println("HTTP-Client konnte URL nicht oeffnen.");
+    tb_printf("HTTP-Client konnte URL nicht oeffnen.\n");
     return;
   }
 
   const int httpCode = http.GET();
 
-  Serial.print("HTTP-Status: ");
-  Serial.println(httpCode);
+  tb_printf("HTTP-Status: %d\n", httpCode);
 
   // Die Doku beschreibt, dass einfache Sender die Serverantwort oft ignorieren.
   // Fuer die Entwicklung geben wir sie trotzdem seriell aus.
   if (httpCode > 0) {
-    Serial.print("Serverantwort: ");
-    Serial.println(http.getString());
+    tb_printf("Serverantwort: %s\n", http.getString().c_str());
   } else {
-    Serial.print("HTTP-Fehler: ");
-    Serial.println(http.errorToString(httpCode));
+    tb_printf("HTTP-Fehler: %s\n", http.errorToString(httpCode).c_str());
   }
 
   http.end();
@@ -138,22 +201,22 @@ static void sendTemperature()
 
 void setup()
 {
-  Serial.begin(115200);
+  pinMode(LED_BUILTIN, OUTPUT);
+  tb_init();
   delay(1000);
 
-  Serial.println();
-  Serial.println("WugTest startet.");
+  tb_printf("\n");
+  tb_printf("WugTest startet.\n");
 
-  sendTemperature();
-  lastSendMs = millis();
+  WiFi.mode(WIFI_STA);
+  configureWiFiPowerSave();
 }
 
 void loop()
 {
-  const unsigned long intervalMs = SEND_INTERVAL_SECONDS * 1000UL;
-
-  if (millis() - lastSendMs >= intervalMs) {
-    lastSendMs = millis();
-    sendTemperature();
-  }
+  lastSendMs = millis();
+  digitalWrite(LED_BUILTIN, LOW); // ON
+  sendTemperature();
+  digitalWrite(LED_BUILTIN, HIGH); // OFF
+  waitUntilNextSend();
 }
