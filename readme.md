@@ -62,13 +62,7 @@ Vor dem Kompilieren muss eine lokale Konfiguration existieren:
 secret/config.h
 ```
 
-Als Startpunkt kann [secret/_placeholder_config.h](secret/_placeholder_config.h) verwendet werden. Die privaten Makros liegen dort zwischen:
-
-```cpp
-// Private START
-// ...
-// Private END
-```
+Als Startpunkt kann [secret/_placeholder_config.h](secret/_placeholder_config.h) verwendet werden.
 
 Wichtige Makros:
 
@@ -80,11 +74,24 @@ Wichtige Makros:
 #define LTX_DEVICE_PASSWORD "CHANGE_ME"
 ```
 
-`secret/config.h` ist absichtlich in `.gitignore` eingetragen. Nur die Platzhalterdatei soll ins Repository.
+## Installation und Schnellstart
 
-## Arduino CLI - Schnellstart
+- Verzeichnis auf Platte anlegen und dieses Repo darin abspeichern
 
-Der Sketch kann mit `arduino-cli` fuer den XIAO ESP32S3 kompiliert und
+- `Arduino IDE` installieren (Version 2.3.8 oder neuer)
+  
+  Die Arduino IDE ist OK für erste Tests und man kann mit ihr wunderbar testen
+  und auch die .ino-Dateien hier öffnen. Man muss aber das Board ('XIAO_ESP32S3'), evtl. PSRAM und COM noch auswählen. Auch ist ratsam, in den `Preferences` den XIAO Board Manager auszuwählen:
+
+```BASH
+https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+```
+
+- In laufender Entwicklung ist es aber oft einfacher, eine externe Schnittstelle (hier `Serial1`) zu verwenden anstelle der internen `Serial` (USB), und via Kommandozeile zu kompilieren:
+
+## Arduino CLI
+
+Der Sketch kann mit `arduino-cli` für den XIAO ESP32S3 kompiliert und
 hochgeladen werden. Die passende Board-ID ist:
 
 ```text
@@ -129,5 +136,5 @@ arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 --port COM33 --upload .\wugt
 ```
 
 Falls der Upload nicht startet, den XIAO ESP32S3 in den Bootloader-Modus
-bringen: `BOOT` gedrückt halten, kurz `RESET` druecken, dann `BOOT` loslassen
+bringen: `BOOT` gedrückt halten, kurz `RESET` drücken, dann `BOOT` loslassen
 und den Upload erneut starten.
