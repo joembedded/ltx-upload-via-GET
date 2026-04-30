@@ -4,9 +4,27 @@
 
 Arduino-Sketch für einen Uploader auf [LTX_SERVER](https://github.com/joembedded/LTX_server) via GET-UPLOAD über einen XIAO ESP32S3.
 
-Die Sketches verbinden sich mit WLAN und senden in einem per Makro einstellbaren Intervall einen ungefaehren Temperaturwert an einen LTX/Wunderground-kompatiblen Upload-Endpunkt.
+![Daten im LTX-Server](docu/img/ltx_server.png)
 
-Neben der normalen Dauerlauf-Version unter `wugtest/` gibt es mit `wugtest_lp/` eine Low-Power-Version. Sie wacht nur zum Upload auf, verbindet sich dann mit dem WLAN, uebertraegt Temperatur, RSSI und einen Deep-Sleep-Eventzaehler und meldet sich danach wieder vom WLAN ab, bevor der ESP32 in Deep-Sleep geht.
+Die Sketches verbinden sich mit WLAN und senden in einem per Makro einstellbaren Intervall einen ungefähren Temperaturwert an einen LTX/Wunderground-kompatiblen Upload-Endpunkt.
+
+Neben der normalen Dauerlauf-Version unter `wugtest/` gibt es mit `wugtest_lp/` eine Low-Power-Version. Sie wacht nur zum Upload auf, verbindet sich dann mit dem WLAN, überträgt Temperatur, RSSI und einen Deep-Sleep-Eventzähler und meldet sich danach wieder vom WLAN ab, bevor der ESP32 in Deep-Sleep geht.
+
+## Energieverbrauch Low Power
+
+`wugtest_lp.ino` schickt alle 60 Sekunden einen Messwert an den Server. Über Standard USB versorgt kann der XIAO ESP32S3 eine 3.6V Batterie laden oder man kann über 2 Lötpads ('Bat+', 'Bat-') das Modul mit 3.3V - 3.7V versorgen.
+
+> [!IMPORTANT]
+> Bei Versorgung über 5V (USB) ist der Ruhestrom im Deep-Sleep ca. 150µA - 500µA, bei Versorgung über 'Bat+', 'Bat-' lediglich ca. 15µA.
+
+Für den durchschnittlichen Stromverbrauch ist hauptsächlich die kurze Wachphase verantwortlich.
+
+![Durchschnittlicher Stromverbrauch Low Power](docu/img/lowpower_bat_3v5.png)
+
+> [!NOTE]
+> Das häufige An-/Ab-melden vom WiFi ist 'eigentlich' kein Good-Practice, aber bei einzelnen wenigen Sensoren soweit OK.
+
+## Die beiden Sketche
 
 In beiden Sketch-Ordnern ist die jeweilige `NAME.ino` nur der Arduino-Einstieg mit `setup()` und `loop()`. Die eigentliche Logik liegt in `app.cpp`/`app.h`, damit Formatierung und "Gehe zu Definition/Deklaration" wie bei normalen C++-Dateien funktionieren.
 
@@ -16,23 +34,23 @@ Die Doku [docu/0950_get_upload_DE.md](docu/0950_get_upload_DE.md) beschreibt das
 http://server.example/ltx/sw/lxu_wug_v1.php?ID=0000000000000000&PASSWORD=CHANGE_ME&tempf=61.70
 ```
 
-`ID` und `PASSWORD` sind Zugangsdaten. Der Temperaturwert wird als Fahrenheit-Wert im Parameter `tempf` uebertragen.
+`ID` und `PASSWORD` sind Zugangsdaten. Der Temperaturwert wird als Fahrenheit-Wert im Parameter `tempf` übertragen.
 
-Die Low-Power-Version haengt zusaetzlich `rssi` und `event` an die URL an:
+Die Low-Power-Version hängt zusätzlich `rssi` und `event` an die URL an:
 
 ```text
 http://server.example/ltx/sw/lxu_wug_v1.php?ID=0000000000000000&PASSWORD=CHANGE_ME&tempf=61.70&rssi=-67&event=42
 ```
 
-Der Eventzaehler liegt im RTC-RAM des ESP32 und bleibt ueber Deep-Sleep-Zyklen erhalten. Bei Reset oder Spannungsverlust startet er wieder neu.
+Der Eventzähler liegt im RTC-RAM des ESP32 und bleibt über Deep-Sleep-Zyklen erhalten. Bei Reset oder Spannungsverlust startet er wieder neu.
 
 ## Dateien
 
-- [wugtest/wugtest.ino](wugtest/wugtest.ino): Einstieg fuer die Dauerlauf-Version.
-- [wugtest/app.cpp](wugtest/app.cpp): Logik fuer WLAN-Verbindung und HTTP-GET-Upload.
-- [wugtest_lp/wugtest_lp.ino](wugtest_lp/wugtest_lp.ino): Einstieg fuer die Low-Power-Version.
-- [wugtest_lp/app.cpp](wugtest_lp/app.cpp): Logik fuer Deep-Sleep, WLAN-Upload, RSSI und Eventzaehler.
-- [secret/_placeholder_config.h](secret/_placeholder_config.h): Vorlage mit ungefaehrlichen Beispielwerten.
+- [wugtest/wugtest.ino](wugtest/wugtest.ino): Einstieg für die Dauerlauf-Version.
+- [wugtest/app.cpp](wugtest/app.cpp): Logik für WLAN-Verbindung und HTTP-GET-Upload.
+- [wugtest_lp/wugtest_lp.ino](wugtest_lp/wugtest_lp.ino): Einstieg für die Low-Power-Version.
+- [wugtest_lp/app.cpp](wugtest_lp/app.cpp): Logik für Deep-Sleep, WLAN-Upload, RSSI und Eventzähler.
+- [secret/_placeholder_config.h](secret/_placeholder_config.h): Vorlage mit ungefährlichen Beispielwerten.
 - `secret/config.h`: lokale private Konfiguration mit WLAN- und Upload-Zugangsdaten.
 - [docu/0950_get_upload_DE.md](docu/0950_get_upload_DE.md): Dokumentation zum GET-Upload.
 
@@ -92,7 +110,7 @@ Den aktuellen Port zeigt:
 arduino-cli board list
 ```
 
-Wenn die erzeugten Binaerdateien im Sketch-Verzeichnis abgelegt werden sollen:
+Wenn die erzeugten Binärdateien im Sketch-Verzeichnis abgelegt werden sollen:
 
 ```powershell
 arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 --export-binaries .\wugtest
@@ -111,5 +129,5 @@ arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 --port COM33 --upload .\wugt
 ```
 
 Falls der Upload nicht startet, den XIAO ESP32S3 in den Bootloader-Modus
-bringen: `BOOT` gedrueckt halten, kurz `RESET` druecken, dann `BOOT` loslassen
+bringen: `BOOT` gedrückt halten, kurz `RESET` druecken, dann `BOOT` loslassen
 und den Upload erneut starten.
