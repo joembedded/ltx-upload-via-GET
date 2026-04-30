@@ -1,30 +1,29 @@
-/* WugTest fuer Seeed Studio XIAO ESP32S3 - (C)JoEmbedded.de
+/* WugTest Low Power fuer Seeed Studio XIAO ESP32S3 - (C)JoEmbedded.de
 
   Dieser Sketch sendet einen Temperaturwert an ein LTX/Wunderground-
-  aehnliches GET-Upload-Script.
+  aehnliches GET-Upload-Script und nutzt zwischen den Uploads Deep-Sleep.
 
-  Bezug zur Doku docu/0950_get_upload_DE.md:
-  - lxu_wug_v1.php nimmt Messwerte per HTTP-GET entgegen.
-  - ID und PASSWORD sind die Zugangsdaten in der URL.
-  - Der Parameter tempf ist in der LTX-Parameterliste als Temperaturwert
-    im Rohformat Fahrenheit definiert.
-  - Ein Upload-Intervall von 1 Minute ist ein typischer Wert.
-  - der XIAO ESP32S3 benötigt hier ca. 35 mA @ 5V 
+  Pro Wake-Zyklus wird ein Zaehler im RTC-RAM erhoeht. Der Zaehler bleibt
+  ueber Deep-Sleep erhalten, wird bei Reset oder Spannungsverlust aber wieder
+  initialisiert.
 */
 
-#include <WiFi.h>
+#include "app.h"
+
+#include <Arduino.h>
 #include <HTTPClient.h>
+#include <WiFi.h>
+#include <esp_sleep.h>
 #include <esp_wifi.h>
 #include <stdarg.h>
-
 
 // ---------------------------------------------------------------------------
 // Konfiguration
 // ---------------------------------------------------------------------------
 
-// Die privaten Werte liegen in secret/config.h.
-// Als Vorlage gibt es secret/_placeholder_config.h.
-#include "secret/config.h"
+// Die privaten Werte liegen in ../secret/config.h.
+// Als Vorlage gibt es ../secret/_placeholder_config.h.
+#include "../secret/config.h"
 
 // Laut Doku ist "tempf" der GET-Parameter fuer Temperaturwerte in Fahrenheit.
 #define LTX_TEMP_PARAMETER "tempf"
@@ -46,9 +45,8 @@
 
 #define UART_TX 43  // D6
 #define UART_RX 44  // D7
-#define WIFI_RECONNECT_CHECK_MS 5000UL
 
-static unsigned long lastSendMs = 0;
+RTC_DATA_ATTR static uint32_t eventCounter = 0;
 
 // ---------------------------------------------------------------------------
 // Hilfsfunktionen
@@ -56,7 +54,7 @@ static unsigned long lastSendMs = 0;
 
 static void tb_printf(const char *fmt, ...)
 {
-  char buf[256];
+  static char buf[256];
   va_list args;
   va_start(args, fmt);
   vsnprintf(buf, sizeof(buf), fmt, args);
@@ -74,39 +72,33 @@ static void tb_init()
   tb_printf("\n\nBoard initialisiert.\n");
 }
 
-static void configureWiFiPowerSave()
+static void configureWiFiForUpload()
 {
   WiFi.persistent(false);
-  WiFi.setAutoReconnect(true);
-  WiFi.setSleep(true);
-  esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+  WiFi.setAutoReconnect(false);
+  WiFi.setSleep(false);
+  esp_wifi_set_ps(WIFI_PS_NONE);
 }
 
-static void waitLowPower(unsigned long waitMs)
+static void stopWiFi()
 {
-  if (waitMs == 0) {
-    return;
-  }
-
-  delay(waitMs);
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  esp_wifi_stop();
 }
 
 static bool connectWiFi()
 {
-  if (WiFi.status() == WL_CONNECTED) {
-    return true;
-  }
-
   tb_printf("Verbinde mit WLAN %s", WIFI_SSID);
 
   WiFi.mode(WIFI_STA);
-  configureWiFiPowerSave();
+  configureWiFiForUpload();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   const unsigned long startedAt = millis();
   while (WiFi.status() != WL_CONNECTED &&
          millis() - startedAt < WIFI_CONNECT_TIMEOUT_MS) {
-    waitLowPower(500);
+    delay(500);
     tb_printf(".");
   }
 
@@ -114,34 +106,12 @@ static bool connectWiFi()
 
   if (WiFi.status() != WL_CONNECTED) {
     tb_printf("WLAN-Verbindung fehlgeschlagen.\n");
+    stopWiFi();
     return false;
   }
 
   tb_printf("WLAN verbunden, IP: %s\n", WiFi.localIP().toString().c_str());
   return true;
-}
-
-static unsigned long sendIntervalMs()
-{
-  return SEND_INTERVAL_SECONDS * 1000UL;
-}
-
-static void waitUntilNextSend()
-{
-  const unsigned long intervalMs = sendIntervalMs();
-
-  while (millis() - lastSendMs < intervalMs) {
-    const unsigned long elapsedMs = millis() - lastSendMs;
-    const unsigned long remainingMs = intervalMs - elapsedMs;
-    const unsigned long sleepMs = min(remainingMs, WIFI_RECONNECT_CHECK_MS);
-
-    waitLowPower(sleepMs);
-
-    if (WiFi.status() != WL_CONNECTED) {
-      tb_printf("WLAN-Verbindung verloren.\n");
-      connectWiFi();
-    }
-  }
 }
 
 static float readApproxTemperatureF()
@@ -150,7 +120,7 @@ static float readApproxTemperatureF()
   return (tempC * 9.0f / 5.0f) + 32.0f;
 }
 
-static String buildUploadUrl(float tempF)
+static String buildUploadUrl(float tempF, int32_t rssi, uint32_t currentEvent)
 {
   char tempBuffer[16];
   snprintf(tempBuffer, sizeof(tempBuffer), "%.2f", tempF);
@@ -166,6 +136,10 @@ static String buildUploadUrl(float tempF)
   url += LTX_TEMP_PARAMETER;
   url += "=";
   url += tempBuffer;
+  url += "&rssi=";
+  url += rssi;
+  url += "&event=";
+  url += currentEvent;
 
   return url;
 }
@@ -176,13 +150,14 @@ static void sendTemperature()
     return;
   }
 
-  tb_printf("WLAN RSSI: %d dBm\n", WiFi.RSSI());
-
+  const int32_t rssi = WiFi.RSSI();
   const float tempF = readApproxTemperatureF();
-  const String url = buildUploadUrl(tempF);
+  const String url = buildUploadUrl(tempF, rssi, eventCounter);
   char tempBuffer[16];
   snprintf(tempBuffer, sizeof(tempBuffer), "%.2f", tempF);
 
+  tb_printf("Event: %lu\n", static_cast<unsigned long>(eventCounter));
+  tb_printf("WLAN RSSI: %ld dBm\n", static_cast<long>(rssi));
   tb_printf("Temperatur ungefaehr: %s F\n", tempBuffer);
   tb_printf("Upload: %s\n", url.c_str());
 
@@ -198,8 +173,6 @@ static void sendTemperature()
 
   tb_printf("HTTP-Status: %d\n", httpCode);
 
-  // Die Doku beschreibt, dass einfache Sender die Serverantwort oft ignorieren.
-  // Fuer die Entwicklung geben wir sie trotzdem seriell aus.
   if (httpCode > 0) {
     tb_printf("Serverantwort: %s\n", http.getString().c_str());
   } else {
@@ -209,28 +182,46 @@ static void sendTemperature()
   http.end();
 }
 
+static void enterDeepSleep()
+{
+  stopWiFi();
+
+  const uint64_t sleepUs = static_cast<uint64_t>(SEND_INTERVAL_SECONDS) * 1000000ULL;
+  esp_sleep_enable_timer_wakeup(sleepUs);
+
+  tb_printf("Deep-Sleep fuer %lu Sekunden.\n", SEND_INTERVAL_SECONDS);
+  Serial.flush();
+  Serial1.flush();
+
+  esp_deep_sleep_start();
+}
+
 // ---------------------------------------------------------------------------
 // Arduino-Einstiegspunkte
 // ---------------------------------------------------------------------------
 
-void setup()
+void appSetup()
 {
   pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH); // OFF
+
   tb_init();
   delay(1000);
 
+  ++eventCounter;
+
   tb_printf("\n");
-  tb_printf("WugTest startet.\n");
+  tb_printf("WugTest Low Power startet.\n");
+  tb_printf("Wakeup-Cause: %d\n", static_cast<int>(esp_sleep_get_wakeup_cause()));
 
-  WiFi.mode(WIFI_STA);
-  configureWiFiPowerSave();
-}
-
-void loop()
-{
-  lastSendMs = millis();
   digitalWrite(LED_BUILTIN, LOW); // ON
   sendTemperature();
   digitalWrite(LED_BUILTIN, HIGH); // OFF
-  waitUntilNextSend();
+
+  enterDeepSleep();
+}
+
+void appLoop()
+{
+  // Wird nicht erreicht, weil appSetup() nach dem Upload in Deep-Sleep wechselt.
 }
