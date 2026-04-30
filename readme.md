@@ -19,7 +19,7 @@ Neben der normalen Dauerlauf-Version unter `wugtest/` gibt es mit `wugtest_lp/` 
 
 Für den durchschnittlichen Stromverbrauch ist hauptsächlich die kurze Wachphase verantwortlich.
 
-![Durchschnittlicher Stromverbrauch Low Power](docu/img/lowpower_bat_3v5.png)
+![Durchschnittlicher Stromverbrauch Low Power](docu/img/lowpower_bat3v5.png)
 
 > [!NOTE]
 > Das häufige An-/Ab-melden vom WiFi ist 'eigentlich' kein Good-Practice, aber bei einzelnen wenigen Sensoren soweit OK.
