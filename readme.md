@@ -83,7 +83,7 @@ Wichtige Makros:
   Die Arduino IDE ist OK für erste Tests und man kann mit ihr wunderbar testen
   und auch die .ino-Dateien hier öffnen. Man muss aber das Board ('XIAO_ESP32S3'), evtl. PSRAM und COM noch auswählen. Auch ist ratsam, in den `Preferences` den XIAO Board Manager auszuwählen:
 
-```BASH
+```powershell
 https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 ```
 
@@ -98,7 +98,11 @@ hochgeladen werden. Die passende Board-ID ist:
 esp32:esp32:XIAO_ESP32S3
 ```
 
-Die Dauerlauf-Version ist ein eigener Sketch-Ordner:
+Die Dauerlauf-Version ist ein eigener Sketch-Ordner (`wugtest\wugtest.ino`). 
+
+> [!TIP]
+> Bei Arbeiten direkt im Verzeichnis kann der Name weggelassen werden, da nur ein
+.ino pro Verzeichnis möglich ist. 
 
 ```powershell
 cd C:\c\arduino\wugtest
